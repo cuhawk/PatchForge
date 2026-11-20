@@ -473,5 +473,152 @@
     "path": "corpus/clean/barrel-constant-member/main.ts",
     "expected": [],
     "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/async-all-tuple/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/async-all-index/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/async-all-branch/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/async-all-other-slot/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/async-all-constant-return/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/async-all-lookalike/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/async-all-then/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/events-imported-emitter/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/events-imported-listener/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/events-unrelated-channel/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/events-consumed-once/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/events-removed-listener/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/events-lookalike/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/actions-module-validation/main.ts",
+    "expected": [
+      "PF007"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/actions-inline-form/main.ts",
+    "expected": [
+      "PF007"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/actions-async-url/main.ts",
+    "expected": [
+      "PF007",
+      "PF008"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/actions-aliased-validation/main.ts",
+    "expected": [
+      "PF007"
+    ],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/actions-guarded/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/actions-literal-allowlist/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/actions-late-directive/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/actions-private-helper/main.ts",
+    "expected": [],
+    "audit": false
   }
 ]
