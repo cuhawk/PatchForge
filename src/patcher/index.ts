@@ -17,7 +17,7 @@ export interface Edit {
 export function applyEdits(input: string, edits: readonly Edit[]): string {
   let result = input;
   let boundary = input.length;
-  for (const { start, end, replacement } of [...edits].sort((a, b) => b.start - a.start)) {
+  for (const { start, end, replacement } of [...edits].sort((a, b) => b.start - a.start || b.end - a.end)) {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > boundary) {
       throw new Error('Invalid or overlapping edit');
     }
@@ -27,9 +27,9 @@ export function applyEdits(input: string, edits: readonly Edit[]): string {
   return result;
 }
 
-export function synthesize(input: string, finding: Finding, options: RepairOptions): Edit[] {
+export function synthesize(input: string, finding: Finding, options: RepairOptions, reserved: readonly string[] = []): Edit[] {
   const source = ts.createSourceFile(finding.sink.file, input, ts.ScriptTarget.Latest, true);
-  const identifiers = new Set<string>();
+  const identifiers = new Set<string>(reserved);
   let target: ts.Node | undefined;
   function scan(node: ts.Node) {
     if (node.getStart(source) === finding.sink.start && node.end === finding.sink.end) target = node;

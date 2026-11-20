@@ -6,7 +6,8 @@ PatchForge localizes configured TypeScript and JavaScript dataflows, emits SARIF
 
 ```sh
 npm install
-npm run scan -- path/to/tsconfig.json path/to/package.json
+npm run scan -- path/to/tsconfig.json path/to/package.json path/to/package-lock.json
+npm run scan --silent -- --emit-diff --repair-config ./repair.json path/to/tsconfig.json
 npx tsc --noEmit
 npm test
 npm run bench
@@ -14,11 +15,25 @@ npm run bench
 
 ## Library
 
-Import the engine from `src/index.ts` in a TypeScript project. Pass project entry files and optional TypeScript compiler options to `analyze`. Use the compiler options from the target project's tsconfig to carry over custom paths and module settings. Pass the findings to `sarif` to serialize them with source and sink locations, or to `ablation` to compare static and repair-template ranking.
+Import the engine from `src/index.ts` in a TypeScript project. Pass project entry files and optional TypeScript compiler options to `analyze`. Use the compiler options from the target project's tsconfig to carry over custom paths and module settings. Pass the findings to `sarif` to serialize them with source and sink locations and stable structural fingerprints, or to `ablation` to compare static and repair-template ranking.
 
 `auditInstallHooks` takes a path to a package manifest and inspects configured lifecycle scripts and local JavaScript references without executing scripts. `synthesize` takes the current file text, a finding, and explicit repair configuration. It returns source-span edits or an empty list when the finding falls outside its templates. Use `verify` to check a proposed edit through trusted callbacks and an in-memory TypeScript compilation. A passing baseline returns `REFUSED_NON_REPRODUCING_CASE` before the edit supplier runs. Verified edits can be passed to `applyEdits`.
 
+Use `auditLockfile` or pass `package-lock.json` and `pnpm-lock.yaml` to the scanner. The audit checks SHA-512 digest format, immutable remote pins, internal registry hosts, and transitive lifecycle metadata using only lockfile contents. Pass `--lock-policy` with a JSON file such as `{"internalScopes":{"@company":["packages.example.test"]},"reviewedLifecycle":["builder@1.2.3"]}`. Internal host checks apply to configured scopes. Lifecycle coverage depends on the package manager recording script or build metadata.
+
+`--emit-diff` writes a unified patch to standard output for inspection or `git apply`. Its repair configuration uses the same fields as `synthesize`, for example `{"guardsModule":"./guards.js","baseDirectory":"/reports"}`. The command leaves source files untouched and emits proposed edits for review.
+
 Run `npm run bench -- --write-results` to record a fresh observation in `benchmarks/RESULTS.md`. The benchmark uses inert source fixtures and runs two refusal checks. Precision and recall match findings to fixture-level rule expectations. Runtime includes program creation and is normalized by the number of files in each inspected fixture.
+
+## Observed benchmark results
+
+| Metric | Observed |
+| --- | ---: |
+| Precision | 100.00% |
+| Recall | 100.00% |
+| FPs on clean corpus | 0 |
+| Invalid-baseline refusals | 2/2 |
+| Median ms/file | 1.13 |
 
 ## Limitations
 

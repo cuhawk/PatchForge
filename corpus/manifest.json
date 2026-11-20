@@ -274,5 +274,204 @@
       "PF101"
     ],
     "audit": true
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-missing-digest/package-lock.json",
+    "expected": [
+      "PF201"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-unpinned-tarball/package-lock.json",
+    "expected": [
+      "PF201",
+      "PF202"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-scope-shadow/package-lock.json",
+    "expected": [
+      "PF203"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/lock-internal-registry/package-lock.json",
+    "expected": [],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/lock-direct-hook/package-lock.json",
+    "expected": [],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-nested-hook/package-lock.json",
+    "expected": [
+      "PF204"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-git-ref/pnpm-lock.yaml",
+    "expected": [
+      "PF202"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/lock-git-commit/pnpm-lock.yaml",
+    "expected": [],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/lock-snapshot-build/pnpm-lock.yaml",
+    "expected": [
+      "PF204"
+    ],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/lock-reviewed-build/pnpm-lock.yaml",
+    "expected": [],
+    "audit": false,
+    "lockPolicy": {
+      "internalScopes": {
+        "@company": [
+          "packages.example.test"
+        ]
+      },
+      "reviewedLifecycle": [
+        "reviewed@1.0.0"
+      ]
+    }
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/barrel-named-star/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/barrel-discarded-input/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/barrel-local-sink/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/barrel-constant-member/main.ts",
+    "expected": [],
+    "audit": false
   }
 ]

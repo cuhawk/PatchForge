@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { isAbsolute, resolve, sep } from 'node:path';
-import { Finding, Site, readRules, site } from '../model.js';
+import { Finding, Site, readRules, site, structuralContext } from '../model.js';
 
 interface Rules {
   sources: string[];
@@ -64,7 +64,34 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
     const sink = site(node, message);
     const trace = value.traces[0] ?? [];
     const key = JSON.stringify([ruleId, sink.file, sink.start]);
-    if (!findings.has(key)) findings.set(key, { ruleId, sink, trace, confidence: trace.length ? 0.95 : 0.65 });
+    if (!findings.has(key)) findings.set(key, { ruleId, sink, trace, fingerprintContext: structuralContext(node), confidence: trace.length ? 0.95 : 0.65 });
+  }
+
+  function exportedValue(symbol: ts.Symbol, state: State): Value | undefined {
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    const declaration = target.valueDeclaration;
+    if (!declaration || declaration.getSourceFile().isDeclarationFile ||
+        program.isSourceFileFromExternalLibrary(declaration.getSourceFile())) return undefined;
+    const moduleState = moduleStates.get(declaration.getSourceFile()) ?? state;
+    const stored = moduleState.get(target);
+    if (stored) return stored;
+    if (ts.isFunctionDeclaration(declaration) && declaration.body) return { ...empty, fn: declaration, closure: moduleState };
+    const initializer = ts.isVariableDeclaration(declaration) || ts.isPropertyAssignment(declaration) ? declaration.initializer :
+      ts.isBinaryExpression(declaration) && declaration.operatorToken.kind === ts.SyntaxKind.EqualsToken ? declaration.right :
+      ts.isPropertyAccessExpression(declaration) && ts.isBinaryExpression(declaration.parent) &&
+        declaration.parent.left === declaration ? declaration.parent.right : undefined;
+    if (!initializer || active.has(initializer)) return empty;
+    active.add(initializer);
+    try { return expression(initializer, moduleState); }
+    finally { active.delete(initializer); }
+  }
+
+  function moduleSummary(symbol: ts.Symbol, state: State): Value {
+    const fields = new Map<string, Value>();
+    for (const entry of checker.getExportsOfModule(symbol)) {
+      fields.set(entry.name, exportedValue(entry, state) ?? empty);
+    }
+    return { ...empty, fields };
   }
 
   function lookup(node: ts.Identifier, state: State): Value {
@@ -72,16 +99,14 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
     if (!symbol) return { ...empty, name: node.text };
     const stored = state.get(symbol);
     if (stored) return stored;
-    let target = symbol;
-    if (symbol.flags & ts.SymbolFlags.Alias) target = checker.getAliasedSymbol(symbol);
+    const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
     const declaration = target.valueDeclaration ?? target.declarations?.[0];
-    if (declaration && ts.isFunctionDeclaration(declaration) && declaration.body) return { ...empty, fn: declaration, closure: moduleStates.get(declaration.getSourceFile()) ?? state };
-    if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer &&
-        declaration.getSourceFile() !== node.getSourceFile() && !active.has(declaration)) {
-      active.add(declaration);
-      try { return expression(declaration.initializer, state); }
-      finally { active.delete(declaration); }
+    if (declaration && (ts.isFunctionDeclaration(declaration) || declaration.getSourceFile() !== node.getSourceFile())) {
+      const value = exportedValue(symbol, state);
+      if (value) return value;
     }
+    if (symbol.declarations?.some(ts.isNamespaceImport) && declaration && ts.isSourceFile(declaration) &&
+        moduleStates.has(declaration)) return moduleSummary(target, state);
     for (const alias of symbol.declarations ?? []) {
       let context: ts.Node | undefined = alias;
       while (context && !ts.isImportDeclaration(context)) context = context.parent;
@@ -143,12 +168,9 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return { ...empty, fn: node, closure: state };
     if (ts.isPropertyAccessExpression(node)) {
       const symbol = checker.getSymbolAtLocation(node.name);
-      const target = symbol && (symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol);
-      const declaration = target?.valueDeclaration;
-      if (declaration && ts.isFunctionDeclaration(declaration) && declaration.body &&
-          !declaration.getSourceFile().isDeclarationFile) {
-        return { ...empty, fn: declaration, closure: moduleStates.get(declaration.getSourceFile()) ?? state };
-      }
+      const receiver = checker.getSymbolAtLocation(node.expression);
+      const access = receiver?.declarations?.some(ts.isNamespaceImport) && symbol && exportedValue(symbol, state);
+      if (access) return access;
       return member(expression(node.expression, state), node.name.text, node);
     }
     if (ts.isElementAccessExpression(node)) return member(expression(node.expression, state), expression(node.argumentExpression, state).literal, node);
@@ -208,24 +230,7 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
           const resolved = resolveModule(module, node.getSourceFile().fileName, mode);
           const source = resolved && program.getSourceFile(resolved);
           const symbol = source && checker.getSymbolAtLocation(source);
-          if (symbol) {
-            const fields = new Map<string, Value>();
-            for (const entry of checker.getExportsOfModule(symbol)) {
-              const target = entry.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(entry) : entry;
-              const declaration = target.valueDeclaration;
-              if (declaration && ts.isFunctionDeclaration(declaration)) fields.set(entry.name, { ...empty, fn: declaration, closure: state });
-              const initializer = declaration && (ts.isVariableDeclaration(declaration) || ts.isPropertyAssignment(declaration)
-                ? declaration.initializer : ts.isBinaryExpression(declaration) && declaration.operatorToken.kind === ts.SyntaxKind.EqualsToken
-                ? declaration.right : ts.isPropertyAccessExpression(declaration) && ts.isBinaryExpression(declaration.parent) &&
-                    declaration.parent.left === declaration ? declaration.parent.right : undefined);
-              if (initializer && !active.has(initializer)) {
-                active.add(initializer);
-                try { fields.set(entry.name, expression(initializer, moduleStates.get(initializer.getSourceFile()) ?? state)); }
-                finally { active.delete(initializer); }
-              }
-            }
-            return { ...empty, fields };
-          }
+          if (symbol && source && moduleStates.has(source)) return moduleSummary(symbol, state);
           return { ...empty, name: module.replace(/^node:/, '') };
         }
       }

@@ -12,6 +12,7 @@
     "scan": "tsx src/cli.ts"
   },
   "dependencies": {
+    "diff": "^8.0.4",
     "fast-check": "^4.0.0",
     "typescript": "^5.9.3",
     "yaml": "^2.8.0"

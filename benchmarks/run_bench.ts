@@ -2,13 +2,14 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import fc from 'fast-check';
-import { analyze, auditInstallHooks, verify } from '../src/index.js';
+import { analyze, auditInstallHooks, auditLockfile, verify, type LockfilePolicy } from '../src/index.js';
 
 interface Case {
   group: 'positive' | 'variant' | 'clean';
   path: string;
   expected: string[];
   audit: boolean;
+  lockPolicy?: LockfilePolicy;
 }
 
 const cases = JSON.parse(readFileSync('corpus/manifest.json', 'utf8')) as Case[];
@@ -16,14 +17,13 @@ let tp = 0;
 let fp = 0;
 let fn = 0;
 let cleanFp = 0;
-let variants = 0;
-let caught = 0;
 const timings: number[] = [];
 
 for (const fixture of cases) {
   const manifest = join(dirname(fixture.path), 'package.json');
   const start = performance.now();
-  const findings = fixture.audit ? auditInstallHooks(manifest) : analyze([fixture.path]);
+  const findings = fixture.lockPolicy ? auditLockfile(fixture.path, fixture.lockPolicy) :
+    fixture.audit ? auditInstallHooks(manifest) : analyze([fixture.path]);
   const elapsed = performance.now() - start;
   const files = readdirSync(dirname(fixture.path)).filter(file =>
     statSync(join(dirname(fixture.path), file)).isFile());
@@ -43,10 +43,7 @@ for (const fixture of cases) {
   if (remaining.length || findings.length !== fixture.expected.length) {
     console.error(`${fixture.path}: expected ${fixture.expected.join(', ')}, observed ${findings.map(finding => finding.ruleId).join(', ')}`);
   }
-  if (fixture.group === 'variant') {
-    variants++;
-    if (!remaining.length) caught++;
-  }
+
 }
 
 const invalid = readdirSync('corpus/invalid-baseline').filter(file => file.endsWith('.ts'));
@@ -72,7 +69,6 @@ const report = `| Metric | Observed |
 | Precision | ${percent(tp, tp + fp)} |
 | Recall | ${percent(tp, tp + fn)} |
 | FPs on clean corpus | ${cleanFp} |
-| Variant catch rate | ${percent(caught, variants)} |
 | Invalid-baseline refusals | ${refusals}/${invalid.length} |
 | Median ms/file | ${median.toFixed(2)} |`;
 console.log(report);
