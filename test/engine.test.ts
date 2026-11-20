@@ -70,3 +70,21 @@ test('verifies a benign contract and rejects property differences', () => {
   assert.equal(different.status, 'FAILED');
   assert.equal(different.stage, 6);
 });
+
+test('traces a CommonJS helper resolved through package exports', () => {
+  const findings = analyze(['corpus/positive/require-helper/main.cjs']);
+  assert.deepEqual(findings.map(finding => finding.ruleId), ['PF002']);
+  assert(findings[0].trace.some(point => point.file.endsWith('helper.cjs')));
+});
+
+test('subprocess repair uses explicit executable configuration and a data argument', () => {
+  const path = 'corpus/positive/process-template/main.ts';
+  const input = readFileSync(path, 'utf8');
+  const [finding] = analyze([path]);
+  assert.deepEqual(synthesize(input, finding, { guardsModule: './guards.js' }), []);
+  const edits = synthesize(input, finding, {
+    guardsModule: './guards.js',
+    executable: { file: 'report', args: ['--format=text'] },
+  });
+  assert.match(applyEdits(input, edits), /__patchforge0\("report", \["--format=text", "--", relay\(req.body\)\], \{ shell: false \}\)/);
+});

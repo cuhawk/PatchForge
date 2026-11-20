@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import fc from 'fast-check';
@@ -27,7 +27,7 @@ for (const fixture of cases) {
   const elapsed = performance.now() - start;
   const files = readdirSync(dirname(fixture.path)).filter(file =>
     statSync(join(dirname(fixture.path), file)).isFile());
-  timings.push(elapsed / files.length);
+  for (const _ of files) timings.push(elapsed / files.length);
   const remaining = [...fixture.expected];
   for (const { ruleId } of findings) {
     const index = remaining.indexOf(ruleId);
@@ -40,6 +40,9 @@ for (const fixture of cases) {
     }
   }
   fn += remaining.length;
+  if (remaining.length || findings.length !== fixture.expected.length) {
+    console.error(`${fixture.path}: expected ${fixture.expected.join(', ')}, observed ${findings.map(finding => finding.ruleId).join(', ')}`);
+  }
   if (fixture.group === 'variant') {
     variants++;
     if (!remaining.length) caught++;
@@ -64,13 +67,15 @@ const middle = Math.floor(sorted.length / 2);
 const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 const percent = (numerator: number, denominator: number) => (100 * numerator / denominator).toFixed(2) + '%';
 
-console.log(`| Metric | Observed |
+const report = `| Metric | Observed |
 | --- | ---: |
 | Precision | ${percent(tp, tp + fp)} |
 | Recall | ${percent(tp, tp + fn)} |
 | FPs on clean corpus | ${cleanFp} |
 | Variant catch rate | ${percent(caught, variants)} |
 | Invalid-baseline refusals | ${refusals}/${invalid.length} |
-| Median ms/file | ${median.toFixed(2)} |`);
+| Median ms/file | ${median.toFixed(2)} |`;
+console.log(report);
+if (process.argv.includes('--write-results')) writeFileSync('benchmarks/RESULTS.md', report + '\n');
 
-if (cleanFp || refusals !== invalid.length) process.exitCode = 1;
+if (fp || fn || refusals !== invalid.length) process.exitCode = 1;

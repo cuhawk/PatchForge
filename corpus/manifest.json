@@ -250,5 +250,29 @@
     "path": "corpus/clean/guarded-path/main.ts",
     "expected": [],
     "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/require-helper/main.cjs",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/hook-decoded/inspect.js",
+    "expected": [
+      "PF102"
+    ],
+    "audit": true
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/hook-download/inspect.js",
+    "expected": [
+      "PF101"
+    ],
+    "audit": true
   }
 ]

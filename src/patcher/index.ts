@@ -5,6 +5,7 @@ export interface RepairOptions {
   guardsModule: string;
   baseDirectory?: string;
   allowedHosts?: readonly string[];
+  executable?: { file: string; args: readonly string[] };
 }
 
 export interface Edit {
@@ -41,14 +42,14 @@ export function synthesize(input: string, finding: Finding, options: RepairOptio
   const printer = ts.createPrinter();
   let helper: string;
   let module: string;
-  let make: (alias: ts.Identifier) => ts.Expression;
+  let make: (callee: ts.Expression) => ts.Expression;
   if (finding.ruleId === 'PF005' && ts.isBinaryExpression(target) &&
       target.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isElementAccessExpression(target.left)) {
     const args = [target.left.expression, target.left.argumentExpression, target.right];
     helper = 'safeWrite';
     module = options.guardsModule;
     make = alias => f.createCallExpression(alias, undefined, args);
-  } else if (ts.isCallExpression(target) && target.arguments.length) {
+  } else if (ts.isCallExpression(target) && target.arguments.length && !target.arguments.some(ts.isSpreadElement)) {
     const call = target;
     const [first, ...rest] = call.arguments;
     const update = (...args: ts.Expression[]) => f.updateCallExpression(call, call.expression, call.typeArguments, args);
@@ -62,17 +63,22 @@ export function synthesize(input: string, finding: Finding, options: RepairOptio
       make = alias => update(f.createCallExpression(alias, undefined,
         [first, f.createArrayLiteralExpression(options.allowedHosts!.map(host => f.createStringLiteral(host)))]),
         f.createObjectLiteralExpression([f.createPropertyAssignment('redirect', f.createStringLiteral('error'))]));
-    } else if (finding.ruleId === 'PF001' && ts.isTemplateExpression(first) && first.templateSpans.length === 1 &&
-        /^[A-Za-z0-9_./-]+ $/.test(first.head.text) && first.templateSpans[0].literal.text === '' &&
-        (call.arguments.length === 1 || (call.arguments.length === 2 &&
-         (ts.isArrowFunction(rest[0]) || ts.isFunctionExpression(rest[0]))))) {
+    } else if (finding.ruleId === 'PF001' && options.executable && rest.length <= 1 &&
+               (!rest.length || ts.isArrowFunction(rest[0]) || ts.isFunctionExpression(rest[0]))) {
+      const { file, args } = options.executable;
       const sync = finding.sink.message.endsWith('.execSync');
       if (sync && rest.length) return [];
+      let input = first;
+      if (ts.isTemplateExpression(first)) {
+        if (first.templateSpans.length !== 1 || first.head.text !== file + ' ' || first.templateSpans[0].literal.text !== '') return [];
+        input = first.templateSpans[0].expression;
+      }
       helper = sync ? 'execFileSync' : 'execFile';
       module = 'node:child_process';
-      make = alias => f.createCallExpression(alias, undefined, [
-        f.createStringLiteral(first.head.text.trim()),
-        f.createArrayLiteralExpression([first.templateSpans[0].expression]),
+      const fixed = [...args, '--'].map(arg => f.createStringLiteral(arg));
+      make = callee => f.createCallExpression(callee, undefined, [
+        f.createStringLiteral(file),
+        f.createArrayLiteralExpression([...fixed, input]),
         f.createObjectLiteralExpression([f.createPropertyAssignment('shell', f.createFalse())]),
         ...rest,
       ]);
@@ -80,6 +86,11 @@ export function synthesize(input: string, finding: Finding, options: RepairOptio
   } else return [];
 
   if (!module) return [];
+  if (/\.c[jt]s$/.test(source.fileName)) {
+    const requireCall = f.createCallExpression(f.createIdentifier('require'), undefined, [f.createStringLiteral(module)]);
+    const callee = f.createPropertyAccessExpression(requireCall, helper);
+    return [{ start: target.getStart(source), end: target.end, replacement: printer.printNode(ts.EmitHint.Expression, make(callee), source) }];
+  }
   let suffix = 0;
   while (identifiers.has('__patchforge' + suffix)) suffix++;
   const alias = f.createIdentifier('__patchforge' + suffix);

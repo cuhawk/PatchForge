@@ -28,7 +28,10 @@ export function auditInstallHooks(packageFile: string): Finding[] {
       const flags = new Set<string>();
       ts.forEachChild(node, child => evaluate(child).forEach(flag => flags.add(flag)));
       if (ts.isIdentifier(node)) marks.get(node.text)?.forEach(flag => flags.add(flag));
-      if (ts.isPropertyAccessExpression(node) && node.getText(file) === 'process.env') flags.add('env');
+      if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
+          node.expression.text === 'process' && node.name.text === 'env') flags.add('env');
+      else if (ts.isPropertyAccessExpression(node) ||
+               (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression))) flags.delete('env');
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) marks.set(node.name.text, flags);
       if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier) &&
           node.moduleSpecifier.text.startsWith('.')) {
@@ -42,8 +45,8 @@ export function auditInstallHooks(packageFile: string): Finding[] {
           reference(resolve(dirname(file.fileName), specifier.text), node);
         }
         if (['fetch', 'https.get', 'http.get', 'axios.get'].includes(name)) flags.add('network');
-        if (name === 'atob' || (name === 'Buffer.from' && node.arguments?.some(arg =>
-          ts.isStringLiteralLike(arg) && arg.text === 'base64'))) flags.add('decode');
+        if (name === 'atob' || (name === 'Buffer.from' && node.arguments?.[1] &&
+          ts.isStringLiteralLike(node.arguments[1]) && node.arguments[1].text === 'base64')) flags.add('decode');
         if (['eval', 'Function', 'globalThis.eval', 'globalThis.Function'].includes(name)) {
           if (flags.has('network')) report('PF101', node);
           if (flags.has('decode')) report('PF102', node);
@@ -92,12 +95,17 @@ export function auditInstallHooks(packageFile: string): Finding[] {
     if (!node || typeof command !== 'string') return;
     const tokens = (command.match(shellTokens) ?? []).map(token => token.replace(/^['"]|['"]$/g, ''));
     const segments: string[][] = [[]];
+    const operators: string[] = [];
     for (const token of tokens) {
-      if ([';', '&&', '||', '|'].includes(token)) segments.push([]);
-      else segments.at(-1)!.push(token);
+      if ([';', '&&', '||', '|'].includes(token)) {
+        operators.push(token);
+        segments.push([]);
+      } else segments.at(-1)!.push(token);
     }
-    if (tokens.includes('|') && segments.some(([bin]) => ['curl', 'wget'].includes(bin)) &&
-        segments.some(([bin]) => ['sh', 'bash', 'node'].includes(bin))) report('PF101', node);
+    if (operators.some((operator, i) => operator === '|' &&
+        ['curl', 'wget'].includes(segments[i][0]) && ['sh', 'bash', 'node'].includes(segments[i + 1][0]))) {
+      report('PF101', node);
+    }
     for (const [bin, first, second] of segments) {
       if (bin === 'printenv' || (bin === 'env' && !first)) report('PF103', node);
       if (bin === 'npm' && ['run', 'run-script'].includes(first) && second) hook(second);

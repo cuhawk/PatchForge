@@ -71,7 +71,7 @@ export function verify<Input>(test: Verification<Input>): Verdict {
     stage = 6;
     if (!test.benign(repaired)) return fail('Repaired benign checks failed');
     fc.assert(fc.property(test.samples, input =>
-      isDeepStrictEqual(test.observe(original, input), test.observe(repaired, input))), { seed: 42, numRuns: 100 });
+      isDeepStrictEqual(test.observe(original, structuredClone(input)), test.observe(repaired, structuredClone(input)))), { seed: 42, numRuns: 100 });
     return { status: 'VERIFIED', stage: 6, edits };
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));

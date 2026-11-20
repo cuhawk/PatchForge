@@ -1,2 +1,3 @@
 /// <reference path="./fixture-api.d.ts" />
-let file = "sample"; file = req.body; fs.readFile(file);
+import { relay } from "./helper.js";
+let file = "sample"; file = relay(req.body); fs.readFile(file);

@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 import { Finding, Site, readRules, site } from '../model.js';
 
 interface Rules {
@@ -27,10 +27,34 @@ const hop = (value: Value, node: ts.Node, message: string): Value =>
 
 export function analyze(files: string[], options: ts.CompilerOptions = {}): Finding[] {
   const rules = readRules<Rules>('taint-ts.yaml');
-  const program = ts.createProgram(files, {
+  const compilerOptions: ts.CompilerOptions = {
     allowJs: true, noEmit: true, noLib: true, types: [], target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, ...options,
-  });
+  };
+  const moduleCache = ts.createModuleResolutionCache(ts.sys.getCurrentDirectory(), name => name, compilerOptions);
+  const resolveModule = (name: string, file: string, mode: ts.ResolutionMode) =>
+    ts.resolveModuleName(name, file, compilerOptions, ts.sys, moduleCache, undefined, mode).resolvedModule?.resolvedFileName;
+  const roots = new Set(files.map(file => resolve(file)));
+  const visited = new Set<string>();
+  let program = ts.createProgram([...roots], compilerOptions);
+  for (;;) {
+    const before = roots.size;
+    for (const file of program.getSourceFiles()) {
+      if (visited.has(file.fileName) || file.isDeclarationFile || program.isSourceFileFromExternalLibrary(file)) continue;
+      visited.add(file.fileName);
+      function discover(node: ts.Node) {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'require' &&
+            node.arguments.length === 1 && ts.isStringLiteralLike(node.arguments[0])) {
+          const path = resolveModule(node.arguments[0].text, file.fileName, ts.ModuleKind.CommonJS);
+          if (path && !path.includes(`${sep}node_modules${sep}`) && !program.getSourceFile(path)) roots.add(path);
+        }
+        ts.forEachChild(node, discover);
+      }
+      discover(file);
+    }
+    if (before === roots.size) break;
+    program = ts.createProgram([...roots], compilerOptions, undefined, program);
+  }
   const checker = program.getTypeChecker();
   const findings = new Map<string, Finding>();
   const active = new Set<ts.Node>();
@@ -161,7 +185,9 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
           } else if (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) {
             const key = ts.isComputedPropertyName(property.name) ? expression(property.name.expression, state).literal :
               ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) ? property.name.text : undefined;
-            const value = expression(ts.isPropertyAssignment(property) ? property.initializer : property.name, state);
+            const binding = ts.isShorthandPropertyAssignment(property) && checker.getShorthandAssignmentValueSymbol(property);
+            const value = binding && state.has(binding) ? state.get(binding)! :
+              expression(ts.isPropertyAssignment(property) ? property.initializer : property.name, state);
             if (key !== undefined) fields.set(key, value);
             else spread.push(value);
           }
@@ -178,8 +204,9 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
         const module = args[0]?.literal;
         if (module === undefined) report('PF006', node, args[0] ?? empty, 'Non-constant module reference');
         else {
-          const resolved = ts.resolveModuleName(module, node.getSourceFile().fileName, program.getCompilerOptions(), ts.sys).resolvedModule;
-          const source = resolved && program.getSourceFile(resolved.resolvedFileName);
+          const mode = callee.name === 'require' ? ts.ModuleKind.CommonJS : ts.ModuleKind.ESNext;
+          const resolved = resolveModule(module, node.getSourceFile().fileName, mode);
+          const source = resolved && program.getSourceFile(resolved);
           const symbol = source && checker.getSymbolAtLocation(source);
           if (symbol) {
             const fields = new Map<string, Value>();
@@ -187,10 +214,14 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
               const target = entry.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(entry) : entry;
               const declaration = target.valueDeclaration;
               if (declaration && ts.isFunctionDeclaration(declaration)) fields.set(entry.name, { ...empty, fn: declaration, closure: state });
-              if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer && !active.has(declaration)) {
-                active.add(declaration);
-                try { fields.set(entry.name, expression(declaration.initializer, state)); }
-                finally { active.delete(declaration); }
+              const initializer = declaration && (ts.isVariableDeclaration(declaration) || ts.isPropertyAssignment(declaration)
+                ? declaration.initializer : ts.isBinaryExpression(declaration) && declaration.operatorToken.kind === ts.SyntaxKind.EqualsToken
+                ? declaration.right : ts.isPropertyAccessExpression(declaration) && ts.isBinaryExpression(declaration.parent) &&
+                    declaration.parent.left === declaration ? declaration.parent.right : undefined);
+              if (initializer && !active.has(initializer)) {
+                active.add(initializer);
+                try { fields.set(entry.name, expression(initializer, moduleStates.get(initializer.getSourceFile()) ?? state)); }
+                finally { active.delete(initializer); }
               }
             }
             return { ...empty, fields };

@@ -1,2 +1,3 @@
 /// <reference path="./fixture-api.d.ts" />
-child_process.exec(req.query);
+import { relay } from "./helper.js";
+child_process.exec(relay(req.query));

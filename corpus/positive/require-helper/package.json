@@ -1,0 +1,1 @@
+{"name":"patchforge-fixture","private":true,"exports":{"./forward":{"require":"./helper.cjs"}}}
