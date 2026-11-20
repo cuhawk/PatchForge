@@ -1,0 +1,254 @@
+[
+  {
+    "group": "positive",
+    "path": "corpus/positive/path-direct/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/path-parameter/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/path-assignment/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/path-template/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/process-direct/main.ts",
+    "expected": [
+      "PF001"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/process-template/main.ts",
+    "expected": [
+      "PF001"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/process-return/main.ts",
+    "expected": [
+      "PF001"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/url-direct/main.ts",
+    "expected": [
+      "PF003"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/url-async/main.ts",
+    "expected": [
+      "PF003"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/url-conditional/main.ts",
+    "expected": [
+      "PF003"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/sql-direct/main.ts",
+    "expected": [
+      "PF004"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/sql-template/main.ts",
+    "expected": [
+      "PF004"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/key-direct/main.ts",
+    "expected": [
+      "PF005"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/key-alias/main.ts",
+    "expected": [
+      "PF005"
+    ],
+    "audit": false
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/hook-environment/fixture.js",
+    "expected": [
+      "PF103"
+    ],
+    "audit": true
+  },
+  {
+    "group": "positive",
+    "path": "corpus/positive/hook-environment-alias/fixture.js",
+    "expected": [
+      "PF103"
+    ],
+    "audit": true
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/wrapper/main.ts",
+    "expected": [
+      "PF001"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/destructure/main.ts",
+    "expected": [
+      "PF004"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/helper-alias/main.ts",
+    "expected": [
+      "PF003"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/split-property/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/spread/main.ts",
+    "expected": [
+      "PF005"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/promise/main.ts",
+    "expected": [
+      "PF003"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/bracket-source/main.ts",
+    "expected": [
+      "PF002"
+    ],
+    "audit": false
+  },
+  {
+    "group": "variant",
+    "path": "corpus/variant/method-alias/main.ts",
+    "expected": [
+      "PF001"
+    ],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/literal-path/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/unused-source/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/bound-sql/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/literal-url/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/allowlist-url/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/literal-command/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/strict-command/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/literal-key/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/unused-field/main.ts",
+    "expected": [],
+    "audit": false
+  },
+  {
+    "group": "clean",
+    "path": "corpus/clean/guarded-path/main.ts",
+    "expected": [],
+    "audit": false
+  }
+]

@@ -1,0 +1,7 @@
+version: 1
+hooks: [preinstall, install, postinstall, prepublish, preprepare, prepare, postprepare, prepublishOnly, prepack, postpack, predependencies, dependencies, postdependencies]
+rules:
+  PF101: Downloaded content used as code
+  PF102: Decoded Base64 content used as code
+  PF103: Environment dump
+  PF104: Unresolved lifecycle script reference
