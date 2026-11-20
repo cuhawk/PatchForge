@@ -1,0 +1,11 @@
+version: 1
+sources: [req.query, req.body, req.params, process.argv, mcp.toolArgs]
+sinks:
+  PF001: {names: ['child_process.exec', 'child_process.execSync'], argument: 0}
+  PF002: {names: ['fs.readFile', 'fs.readFileSync', 'fs.promises.readFile', 'fs/promises.readFile'], argument: 0}
+  PF003: {names: [fetch, globalThis.fetch], argument: 0}
+  PF004: {names: [db.query, db.execute], argument: 0}
+guards:
+  path: [path.resolve, path.sep, startsWith]
+  bindings: [db.query, db.execute]
+  allowlist: [strictEquality, literalArrayIncludes]
