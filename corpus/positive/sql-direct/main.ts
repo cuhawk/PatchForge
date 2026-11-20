@@ -1,2 +1,3 @@
 /// <reference path="./fixture-api.d.ts" />
-db.query(req.query);
+import { relay } from "./helper.js";
+db.query(relay(req.query));

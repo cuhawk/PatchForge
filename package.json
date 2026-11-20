@@ -3,8 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
-  "scripts": {"test": "tsx --test test/*.test.ts", "bench": "tsx benchmarks/run_bench.ts"},
-  "dependencies": {"fast-check": "^4.0.0", "typescript": "^5.9.3", "yaml": "^2.8.0"},
-  "devDependencies": {"@types/node": "^22.0.0", "tsx": "^4.20.0"}
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "bench": "tsx benchmarks/run_bench.ts",
+    "scan": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "fast-check": "^4.0.0",
+    "typescript": "^5.9.3",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0"
+  }
 }

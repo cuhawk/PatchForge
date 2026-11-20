@@ -1,2 +1,3 @@
 /// <reference path="./fixture-api.d.ts" />
-fetch(mcp.toolArgs);
+import { relay } from "./helper.js";
+fetch(relay(mcp.toolArgs));

@@ -1,2 +1,3 @@
 /// <reference path="./fixture-api.d.ts" />
-function selected() { return mcp.toolArgs; } child_process.exec(selected());
+import { relay } from "./helper.js";
+function selected() { return relay(mcp.toolArgs); } child_process.exec(selected());
