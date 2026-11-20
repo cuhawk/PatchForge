@@ -1,0 +1,4 @@
+lockfileVersion: '9.0'
+packages:
+  sample@1.0.0:
+    resolution: {repo: https://git.example.test/sample.git, commit: main}

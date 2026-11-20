@@ -1,7 +1,7 @@
 import ts from 'typescript';
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
-import { readRules, site, type Finding } from '../model.js';
+import { readRules, site, structuralContext, type Finding } from '../model.js';
 
 interface HookRules { hooks: string[]; rules: Record<string, string> }
 
@@ -19,7 +19,7 @@ export function auditInstallHooks(packageFile: string): Finding[] {
 
   function report(ruleId: string, node: ts.Node) {
     const sink = site(node, rules.rules[ruleId]);
-    findings.set(JSON.stringify([ruleId, sink.file, sink.start]), { ruleId, sink, trace: [], confidence: 0.8 });
+    findings.set(JSON.stringify([ruleId, sink.file, sink.start]), { ruleId, sink, trace: [], fingerprintContext: structuralContext(node), confidence: 0.8 });
   }
 
   function inspectScript(file: ts.SourceFile) {

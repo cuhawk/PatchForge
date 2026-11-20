@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { relative, resolve } from 'node:path';
 import type { Finding, Site } from '../model.js';
 
@@ -38,6 +39,11 @@ export function sarif(findings: readonly Finding[], root = process.cwd(), ranker
       results: rank(findings, ranker).map(finding => ({
         ruleId: finding.ruleId, ruleIndex: rules.findIndex(rule => rule.id === finding.ruleId),
         level: 'warning', message: { text: finding.sink.message }, locations: [location(finding.sink)],
+        partialFingerprints: {
+          'primaryLocationLineHash/v1': createHash('sha256')
+            .update(JSON.stringify([finding.ruleId, finding.sink.message, finding.fingerprintContext]))
+            .digest('hex'),
+        },
         codeFlows: [{ threadFlows: [{ locations: [...finding.trace, finding.sink].map(point => ({ location: location(point) })) }] }],
         properties: { confidence: finding.confidence, ranker: ranker.id },
       })),
