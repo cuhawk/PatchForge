@@ -41,7 +41,7 @@ if (values["emit-diff"]) {
   if (typeof options.guardsModule !== "string" || !options.guardsModule) throw new Error("A guardsModule string is required");
   const files = new Map<string, { input: string; edits: Edit[]; aliases: string[] }>();
   for (const finding of rank(findings)) {
-    if (!["PF001", "PF002", "PF003", "PF005"].includes(finding.ruleId)) continue;
+    if (!["PF001", "PF002", "PF003", "PF005", "PF007", "PF008"].includes(finding.ruleId)) continue;
     const file = resolve(finding.sink.file);
     let plan = files.get(file);
     if (!plan) {
@@ -52,6 +52,8 @@ if (values["emit-diff"]) {
     if (edits.some(edit => plan.edits.some(existing =>
       edit.start < existing.end && existing.start < edit.end))) continue;
     for (const edit of edits) {
+      if (plan.edits.some(existing => existing.start === edit.start && existing.end === edit.end &&
+          existing.replacement === edit.replacement)) continue;
       const alias = /^import .* as (__patchforge\d+) /m.exec(edit.replacement)?.[1];
       if (alias) plan.aliases.push(alias);
       plan.edits.push(edit);

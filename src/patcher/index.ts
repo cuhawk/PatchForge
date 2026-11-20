@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { isServerAction, validationType } from '../analyzer/actions.js';
 import type { Finding } from '../model.js';
 
 export interface RepairOptions {
@@ -40,6 +41,40 @@ export function synthesize(input: string, finding: Finding, options: RepairOptio
   if (!target) return [];
   const f = ts.factory;
   const printer = ts.createPrinter();
+  if (finding.ruleId === 'PF007' && ts.isParameter(target) && ts.isIdentifier(target.name) &&
+      ts.isFunctionLike(target.parent) && isServerAction(target.parent)) {
+    const body = target.parent.body;
+    function guard(input: ts.ParameterDeclaration): ts.IfStatement | undefined {
+      const type = validationType(input);
+      if (!type || !ts.isIdentifier(input.name)) return undefined;
+      const parameter = f.createIdentifier(input.name.text);
+      const invalid = type === 'FormData'
+        ? f.createPrefixUnaryExpression(ts.SyntaxKind.ExclamationToken, f.createParenthesizedExpression(
+          f.createBinaryExpression(parameter, ts.SyntaxKind.InstanceOfKeyword,
+            f.createPropertyAccessExpression(f.createIdentifier('globalThis'), 'FormData'))))
+        : f.createBinaryExpression(f.createTypeOfExpression(parameter), ts.SyntaxKind.ExclamationEqualsEqualsToken,
+          f.createStringLiteral(type));
+      return f.createIfStatement(invalid,
+        f.createBlock([f.createThrowStatement(f.createNewExpression(
+          f.createPropertyAccessExpression(f.createIdentifier('globalThis'), 'TypeError'), undefined,
+          [f.createStringLiteral('Invalid Server Action input')]))], true));
+    }
+    const validation = guard(target);
+    if (!validation) return [];
+    const print = (node: ts.Node) => printer.printNode(ts.EmitHint.Unspecified, node, source);
+    if (!ts.isBlock(body)) {
+      const guards = target.parent.parameters.map(guard).filter(node => node !== undefined);
+      return [
+        { start: body.getStart(source), end: body.getStart(source),
+          replacement: '{\n' + guards.map(print).join('\n') + '\nreturn ' },
+        { start: body.getEnd(), end: body.getEnd(), replacement: ';\n}' },
+      ];
+    }
+    const first = body.statements.find(statement =>
+      !ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression));
+    const start = first?.getStart(source) ?? body.end - 1;
+    return [{ start, end: start, replacement: print(validation) + '\n' }];
+  }
   let helper: string;
   let module: string;
   let make: (callee: ts.Expression) => ts.Expression;
@@ -57,12 +92,16 @@ export function synthesize(input: string, finding: Finding, options: RepairOptio
       helper = 'safePath';
       module = options.guardsModule;
       make = alias => update(f.createCallExpression(alias, undefined, [f.createStringLiteral(options.baseDirectory!), first]), ...rest);
-    } else if (finding.ruleId === 'PF003' && options.allowedHosts?.length && !rest.length) {
+    } else if (options.allowedHosts?.length &&
+      ((finding.ruleId === 'PF003' && !rest.length) || (finding.ruleId === 'PF008' && rest.length <= 1))) {
       helper = 'safeUrl';
       module = options.guardsModule;
       make = alias => update(f.createCallExpression(alias, undefined,
         [first, f.createArrayLiteralExpression(options.allowedHosts!.map(host => f.createStringLiteral(host)))]),
-        f.createObjectLiteralExpression([f.createPropertyAssignment('redirect', f.createStringLiteral('error'))]));
+        f.createObjectLiteralExpression([
+          ...(rest.length ? [f.createSpreadAssignment(rest[0])] : []),
+          f.createPropertyAssignment('redirect', f.createStringLiteral('error')),
+        ]));
     } else if (finding.ruleId === 'PF001' && options.executable && rest.length <= 1 &&
                (!rest.length || ts.isArrowFunction(rest[0]) || ts.isFunctionExpression(rest[0]))) {
       const { file, args } = options.executable;

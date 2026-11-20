@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import { isAbsolute, resolve, sep } from 'node:path';
+import { isServerAction, validatedParameters, validationType } from './actions.js';
 import { Finding, Site, readRules, site, structuralContext } from '../model.js';
 
 interface Rules {
@@ -16,14 +17,43 @@ interface Value {
   fn?: ts.FunctionLikeDeclaration;
   closure?: State;
   base?: Value;
+  fulfilled?: Value;
+  emitter?: Emitter;
+  eventMethod?: string;
 }
 
+interface Listener {
+  event: string;
+  callback: Value;
+  once: boolean;
+}
+interface Emitter {
+  listeners: Listener[];
+}
 type State = Map<ts.Symbol, Value>;
 const empty: Value = { traces: [] };
 const merge = (...values: Value[]): Value => ({ traces: values.flatMap(value => value.traces).slice(0, 32) });
-const choices = (a: Value, b: Value): Value => a === b ? a : merge(a, b);
+function choices(a: Value, b: Value): Value {
+  if (a === b) return a;
+  const fields = new Map<string, Value>();
+  for (const key of new Set([...(a.fields?.keys() ?? []), ...(b.fields?.keys() ?? [])])) {
+    fields.set(key, choices(a.fields?.get(key) ?? merge(a), b.fields?.get(key) ?? merge(b)));
+  }
+  const value = merge(a, b);
+  return {
+    ...value,
+    fields: fields.size ? fields : undefined,
+    fulfilled: a.fulfilled || b.fulfilled ? choices(fulfilled(a), fulfilled(b)) : undefined,
+    literal: a.literal === b.literal ? a.literal : undefined,
+  };
+}
+const moduleName = (name: string): string =>
+  name === 'events' ? 'node:events' : name === 'node:events' ? name : name.replace(/^node:/, '');
+const fulfilled = (value: Value): Value => value.fulfilled ?? value;
 const hop = (value: Value, node: ts.Node, message: string): Value =>
-  ({ ...value, traces: value.traces.map(trace => [...trace, site(node, message)]) });
+  ({ ...value, traces: value.traces.map(trace => [...trace, site(node, message)]),
+    fields: value.fields && new Map([...value.fields].map(([key, field]) => [key, hop(field, node, message)])),
+    fulfilled: value.fulfilled && hop(value.fulfilled, node, message) });
 
 export function analyze(files: string[], options: ts.CompilerOptions = {}): Finding[] {
   const rules = readRules<Rules>('taint-ts.yaml');
@@ -59,10 +89,12 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
   const findings = new Map<string, Finding>();
   const active = new Set<ts.Node>();
   const reached = new Set<ts.Node>();
+  const moduleEmitters = new Set<Emitter>();
+  let initializingModules = true;
 
   function report(ruleId: string, node: ts.Node, value: Value, message: string) {
     const sink = site(node, message);
-    const trace = value.traces[0] ?? [];
+    const trace = value.traces.find(trace => ruleId === 'PF008' && trace[0]?.message === 'Server Action input') ?? value.traces[0] ?? [];
     const key = JSON.stringify([ruleId, sink.file, sink.start]);
     if (!findings.has(key)) findings.set(key, { ruleId, sink, trace, fingerprintContext: structuralContext(node), confidence: trace.length ? 0.95 : 0.65 });
   }
@@ -111,7 +143,7 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
       let context: ts.Node | undefined = alias;
       while (context && !ts.isImportDeclaration(context)) context = context.parent;
       if (context && ts.isStringLiteral(context.moduleSpecifier)) {
-        const module = context.moduleSpecifier.text.replace(/^node:/, '');
+        const module = moduleName(context.moduleSpecifier.text);
         const imported = ts.isImportSpecifier(alias) ? (alias.propertyName ?? alias.name).text : '';
         return { ...empty, name: imported ? module + '.' + imported : module };
       }
@@ -122,11 +154,14 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
   }
 
   function member(value: Value, key: string | undefined, node: ts.Node): Value {
+    if (value.emitter && key && ['on', 'addListener', 'once', 'emit', 'off', 'removeListener'].includes(key)) {
+      return { ...empty, emitter: value.emitter, eventMethod: key };
+    }
     const selected = key === undefined ? undefined : value.fields?.get(key);
     if (selected) return hop(selected, node, 'Read field');
     const name = value.name && key !== undefined ? value.name + '.' + key : undefined;
     if (name && rules.sources.includes(name)) return { traces: [[site(node, 'Untrusted source ' + name)]] };
-    return { ...hop(value, node, 'Read property'), name, fields: undefined, fn: undefined, literal: undefined };
+    return { ...hop(value, node, 'Read property'), name, fields: undefined, fn: undefined, literal: undefined, fulfilled: undefined, emitter: undefined };
   }
 
   function bind(node: ts.BindingName, value: Value, state: State) {
@@ -154,16 +189,26 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
       const returns: Value[] = [];
       if (ts.isBlock(fn.body)) statements(fn.body.statements, local, returns);
       else returns.push(expression(fn.body, local));
-      return hop(returns.length ? returns.reduce(choices) : empty, node, 'Return from helper');
+      const signature = checker.getSignatureFromDeclaration(fn);
+      const returnType = signature && checker.getReturnTypeOfSignature(signature);
+      const awaitedType = returnType && checker.getAwaitedType(returnType);
+      const async = ts.getModifiers(fn)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+        (awaitedType !== undefined && awaitedType !== returnType);
+      const result = returns.length ? returns.map(value => async ? fulfilled(value) : value).reduce(choices) : empty;
+      const summary = hop(result, node, 'Return from helper');
+      return async ? { ...empty, fulfilled: summary } : summary;
     } finally { active.delete(fn); }
   }
 
   function expression(node: ts.Expression, state: State): Value {
     if (ts.isIdentifier(node)) return lookup(node, state);
-    if (ts.isStringLiteralLike(node)) return { ...empty, literal: node.text };
+    if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return { ...empty, literal: node.text };
     if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) ||
-        ts.isSatisfiesExpression(node) || ts.isAwaitExpression(node)) {
-      return hop(expression(node.expression, state), node, ts.isAwaitExpression(node) ? 'Await promise' : 'Read expression');
+        ts.isSatisfiesExpression(node) ) {
+      return hop(expression(node.expression, state), node, 'Read expression');
+    }
+    if (ts.isAwaitExpression(node)) {
+      return hop(fulfilled(expression(node.expression, state)), node, 'Await promise');
     }
     if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return { ...empty, fn: node, closure: state };
     if (ts.isPropertyAccessExpression(node)) {
@@ -171,7 +216,9 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
       const receiver = checker.getSymbolAtLocation(node.expression);
       const access = receiver?.declarations?.some(ts.isNamespaceImport) && symbol && exportedValue(symbol, state);
       if (access) return access;
-      return member(expression(node.expression, state), node.name.text, node);
+      const value = expression(node.expression, state);
+      const property = member(value, node.name.text, node);
+      return node.name.text === 'then' ? { ...property, base: value } : property;
     }
     if (ts.isElementAccessExpression(node)) return member(expression(node.expression, state), expression(node.argumentExpression, state).literal, node);
     if (ts.isTemplateExpression(node)) return hop(merge(...node.templateSpans.map(span => expression(span.expression, state))), node, 'Interpolate string');
@@ -215,9 +262,29 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
           }
         }
       } else {
-        node.elements.forEach((element, i) => fields.set(String(i), expression(element, state)));
+        let index = 0;
+        for (const element of node.elements) {
+          if (ts.isSpreadElement(element)) {
+            const value = expression(element.expression, state);
+            if (!value.fields) {
+              spread.push(value);
+              break;
+            }
+            for (const field of value.fields.values()) fields.set(String(index++), field);
+          } else fields.set(String(index++), expression(element, state));
+        }
       }
       return { ...merge(...spread), fields };
+    }
+    if (ts.isNewExpression(node)) {
+      const constructor = expression(node.expression, state);
+      node.arguments?.forEach(argument => expression(argument, state));
+      if (['node:events.EventEmitter', 'node:events'].includes(constructor.name ?? '')) {
+        const emitter: Emitter = { listeners: [] };
+        if (initializingModules) moduleEmitters.add(emitter);
+        return { ...empty, emitter };
+      }
+      return empty;
     }
     if (ts.isCallExpression(node)) {
       const callee = expression(node.expression, state);
@@ -231,21 +298,60 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
           const source = resolved && program.getSourceFile(resolved);
           const symbol = source && checker.getSymbolAtLocation(source);
           if (symbol && source && moduleStates.has(source)) return moduleSummary(symbol, state);
-          return { ...empty, name: module.replace(/^node:/, '') };
+          return { ...empty, name: moduleName(module) };
         }
       }
       for (const [id, sink] of Object.entries(rules.sinks)) {
         const value = args[sink.argument];
         if (callee.name && sink.names.includes(callee.name) && value?.traces.length) {
-          report(id, node, value, 'Tainted argument to ' + callee.name);
+          const actionUrl = id === 'PF003' && value.traces.some(trace =>
+            trace[0]?.message === 'Server Action input');
+          report(actionUrl ? 'PF008' : id, node, value,
+            actionUrl ? 'Server Action URL requires an outbound allowlist' : 'Tainted argument to ' + callee.name);
         }
       }
       if (callee.name === rules.guards.path[0] && node.arguments.length === 2) {
         return { ...merge(...args), base: args[0] };
       }
-      if (callee.name === 'Promise.resolve') return args[0] ?? empty;
+      if (callee.name === 'Promise.resolve') return { ...empty, fulfilled: fulfilled(args[0] ?? empty) };
+      if (callee.name === 'Promise.all' && args[0]) {
+        const batch = args[0];
+        const fields = batch.fields && new Map([...batch.fields].map(([key, value]) =>
+          [key, hop(fulfilled(value), node, 'Resolve Promise.all element')]));
+        return { ...empty, fulfilled: { ...batch, fields } };
+      }
+      if (callee.emitter && callee.eventMethod) {
+        const { emitter, eventMethod } = callee;
+        const [event, callback] = args;
+        if (event?.literal === undefined) return empty;
+        if (eventMethod === 'emit') {
+          for (const listener of [...emitter.listeners]) {
+            if (listener.event !== event.literal) continue;
+            if (listener.once) {
+              const index = emitter.listeners.indexOf(listener);
+              if (index === -1) continue;
+              emitter.listeners.splice(index, 1);
+            }
+            invoke(listener.callback, args.slice(1).map(value => hop(value, node, 'Emit ' + event.literal)), node, state);
+          }
+          return empty;
+        }
+        if (callback?.fn && (eventMethod === 'off' || eventMethod === 'removeListener')) {
+          for (let index = emitter.listeners.length - 1; index >= 0; index--) {
+            const { event: registeredEvent, callback: registeredCallback } = emitter.listeners[index];
+            if (registeredEvent !== event.literal || registeredCallback.fn !== callback.fn ||
+                registeredCallback.closure !== callback.closure) continue;
+            emitter.listeners.splice(index, 1);
+            break;
+          }
+        } else if (callback?.fn) emitter.listeners.push({ event: event.literal, callback, once: eventMethod === 'once' });
+        return { ...empty, emitter };
+      }
       if (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'then' && args[0]?.fn) {
-        return invoke(args[0], [expression(node.expression.expression, state)], node, state);
+        const receiver = callee.base;
+        if (receiver?.fulfilled) {
+          return { ...empty, fulfilled: fulfilled(invoke(args[0], [fulfilled(receiver)], node, state)) };
+        }
       }
       if (callee.fn) return invoke(callee, args, node, state);
       if (callee.name && Object.values(rules.sinks).some(sink => sink.names.includes(callee.name!))) return empty;
@@ -318,12 +424,28 @@ export function analyze(files: string[], options: ts.CompilerOptions = {}): Find
   const modules = program.getSourceFiles().filter(module => !module.isDeclarationFile && !program.isSourceFileFromExternalLibrary(module));
   const moduleStates = new Map(modules.map(module => [module, new Map<ts.Symbol, Value>()]));
   for (const [module, state] of moduleStates) statements(module.statements, state, []);
+  initializingModules = false;
+  const initialListeners = new Map([...moduleEmitters].map(emitter => [emitter, [...emitter.listeners]]));
   for (const [module, state] of moduleStates) {
     function visit(node: ts.Node) {
       if ((ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node) ||
-           ts.isMethodDeclaration(node)) && !reached.has(node)) {
-        invoke({ ...empty, fn: node, closure: state }, node.parameters.map(parameter =>
-          ts.isIdentifier(parameter.name) ? { ...empty, name: parameter.name.text } : empty), node, state);
+           ts.isMethodDeclaration(node))) {
+        if (isServerAction(node)) {
+          const validated = validatedParameters(node.body);
+          const args = node.parameters.map(parameter => {
+            const value = { traces: [[site(parameter, 'Server Action input')]] };
+            const type = validationType(parameter);
+            if (type && !validated.has(JSON.stringify([parameter.name.getText(), type]))) {
+              report('PF007', parameter, value, 'Server Action input requires runtime validation');
+            }
+            return value;
+          });
+          invoke({ ...empty, fn: node, closure: state }, args, node, state);
+        } else if (!reached.has(node)) {
+          invoke({ ...empty, fn: node, closure: state }, node.parameters.map(parameter =>
+            ts.isIdentifier(parameter.name) ? { ...empty, name: parameter.name.text } : empty), node, state);
+        }
+        for (const [emitter, listeners] of initialListeners) emitter.listeners = [...listeners];
       }
       ts.forEachChild(node, visit);
     }

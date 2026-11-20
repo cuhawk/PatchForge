@@ -23,6 +23,8 @@ Use `auditLockfile` or pass `package-lock.json` and `pnpm-lock.yaml` to the scan
 
 `--emit-diff` writes a unified patch to standard output for inspection or `git apply`. Its repair configuration uses the same fields as `synthesize`, for example `{"guardsModule":"./guards.js","baseDirectory":"/reports"}`. The command leaves source files untouched and emits proposed edits for review.
 
+The TypeScript analyzer follows resolved helper returns through `await`, `Promise.all` tuple positions, and promise callbacks. It follows payloads between statically resolved Node `EventEmitter` instances and listeners on known event names. Server Actions can opt in through a module-level or inline `"use server"` directive. PF007 reports missing runtime checks for required `string`, `number`, `boolean`, and `FormData` parameters. PF008 reports action input flowing into an outbound fetch. Set `allowedHosts` in the repair config to enable its URL template. It preserves fetch options and forces `redirect: "error"`. A `FormData` type guard checks the container. Application-specific validation still belongs with the action.
+
 Run `npm run bench -- --write-results` to record a fresh observation in `benchmarks/RESULTS.md`. The benchmark uses inert source fixtures and runs two refusal checks. Precision and recall match findings to fixture-level rule expectations. Runtime includes program creation and is normalized by the number of files in each inspected fixture.
 
 ## Observed benchmark results
@@ -33,11 +35,11 @@ Run `npm run bench -- --write-results` to record a fresh observation in `benchma
 | Recall | 100.00% |
 | FPs on clean corpus | 0 |
 | Invalid-baseline refusals | 2/2 |
-| Median ms/file | 1.13 |
+| Median ms/file | 1.29 |
 
 ## Limitations
 
-- The analyzer models a subset of TypeScript and JavaScript control flow and built-ins. Results can miss flows through loops, heap updates, custom guards, indirect callbacks, `eval`, `new Function`, monkey-patched globals, and minified bundles.
+- The analyzer models a subset of TypeScript and JavaScript control flow and built-ins. Results can miss flows through loops, heap updates, custom guards, indirect callbacks, `eval`, `new Function`, monkey-patched globals, and minified bundles. Event delivery is modeled for known event names and analyzed registration and emission order. Dynamic events and delivery across independent entry points can be missed.
 - The lifecycle auditor matches a subset of shell syntax and tracks selected values in referenced JavaScript. Script launchers and shell expansions can limit coverage.
 - Repairs require explicit policy settings. The path guard requires an existing file and canonical base. Concurrent filesystem changes require protection at file-open time. URL repair accepts allowlisted public HTTPS IP literals on the default port, rejects reserved address ranges, and disables redirects. The subprocess template requires a configured executable and fixed arguments. Use an executable that accepts `--` followed by one data argument.
 - The verifier runs trusted callbacks in the current process. It type-checks edited source in memory and compares benign observations using fast-check. Callers provide regression observations and samples.
